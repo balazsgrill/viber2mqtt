@@ -1,0 +1,44 @@
+mqtt:
+  host: localhost
+  port: 1883
+  # username: ...
+  # password: ...
+
+viber:
+  auth_token: "PASTE_YOUR_VIBER_AUTH_TOKEN"
+  bot_name: "Home Bot"
+  # Publicly reachable HTTPS URL Viber can call (e.g. behind a reverse proxy).
+  webhook_url: "https://example.com/viber/webhook"
+
+storage:
+  backend: sqlite          # one of: json, sqlite, postgres
+  path: ./data/viber2mqtt.db
+  # dsn: postgres://user:pass@host:5432/dbname   # postgres only
+
+# HTTP port the webhook listens on.
+server:
+  port: 8080
+
+notifications:
+  - id: front-door
+    topic: home/sensors/front-door
+    message: "Front door {state}"
+    description: "Front door open/closed sensor"
+
+  - id: temperature
+    topic: home/sensors/living-room/temperature
+    message: "Living room temperature: {value} °C"
+    description: "Living room temperature"
+
+actions:
+  - id: lights-on
+    trigger: "lights on"
+    topic: home/actions/lights
+    payload: "ON"
+    description: "Turn on living room lights"
+
+  - id: lights-off
+    trigger: "lights off"
+    topic: home/actions/lights
+    payload: "OFF"
+    description: "Turn off living room lights"
