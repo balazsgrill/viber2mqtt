@@ -6,6 +6,9 @@ on:
     tags: ['v*']
   pull_request:
 
+permissions:
+  contents: write
+
 env:
   GO_VERSION: '1.22'
 
@@ -49,14 +52,25 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      # no path: both artifacts are flattened into the workspace root
+      # named downloads place each file directly in dist/ (a bulk download
+      # would nest each artifact in its own subdirectory)
       - uses: actions/download-artifact@v4
+        with:
+          name: viber2mqtt-linux-amd64
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: viber2mqtt-linux-arm64
+          path: dist
+      # rolling release: replaces same-named assets and moves the "latest"
+      # tag to this commit; prerelease so tagged releases stay "Latest"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: "main @ ${{ github.sha }}"
           prerelease: true
-          overwrite: true
-          delete_tag: true
+          target_commitish: ${{ github.sha }}
+          overwrite_files: true
+          fail_on_unmatched_files: true
           body: Rolling build from main, refreshed on every commit.
-          files: viber2mqtt-linux-*
+          files: dist/*
