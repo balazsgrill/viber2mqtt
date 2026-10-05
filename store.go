@@ -12,7 +12,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 type User struct {
@@ -41,7 +41,7 @@ func OpenStore(cfg StorageConfig) (Store, error) {
 		if err := os.MkdirAll(filepath.Dir(cfg.Path), 0o755); err != nil {
 			return nil, fmt.Errorf("storage: %w", err)
 		}
-		return openSQLStore("sqlite3", "file:"+cfg.Path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
+		return openSQLStore("sqlite", "file:"+cfg.Path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
 	case "postgres":
 		return openSQLStore("postgres", postgresDSN(cfg.DSN))
 	default:
