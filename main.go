@@ -161,6 +161,7 @@ func (a *app) handler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	log.Printf("viber: callback %q from %s (path %s)", ev.Event, r.RemoteAddr, r.URL.Path)
 	switch ev.Event {
 	case "webhook":
 		// set_webhook verification callback: nothing to do, just 200.
@@ -420,8 +421,10 @@ func run(ctx context.Context, cfg *Config) error {
 	}()
 
 	if err := viber.RegisterWebhook(cfg.Viber.Webhook); err != nil {
-		ln.Close()
-		return fmt.Errorf("viber webhook registration: %w", err)
+		// Non-fatal: keep the webhook server up so the URL can be debugged
+		// (e.g. proxy routing) and Viber retries the callback; the app also
+		// re-registers on every restart.
+		log.Printf("viber: webhook registration FAILED: %v — server staying up, will retry on restart", err)
 	}
 
 	if err := a.connectMQTT(); err != nil {
