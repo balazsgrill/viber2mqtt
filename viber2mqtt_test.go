@@ -403,3 +403,18 @@ func postEvent(t *testing.T, a *app, body string) {
 		t.Fatalf("webhook status: %d", w.Code)
 	}
 }
+
+// ---------- timestamp parsing ----------
+
+func TestParseTS(t *testing.T) {
+	// formats returned by sqlite and postgres TIMESTAMP columns
+	for _, s := range []string{
+		"2026-10-09T12:45:00Z",      // RFC3339
+		"2026-10-09 12:45:00",       // postgres timestamp (no fraction)
+		"2026-10-09 12:45:00.123456", // postgres timestamp (microseconds)
+	} {
+		if got := parseTS(s); got.IsZero() {
+			t.Errorf("parseTS(%q) = zero", s)
+		}
+	}
+}

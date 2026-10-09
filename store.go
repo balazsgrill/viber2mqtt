@@ -231,7 +231,7 @@ func openSQLStore(driver, dsn string) (*sqlStore, error) {
 	schema := "CREATE TABLE IF NOT EXISTS users (\n" +
 		"  id TEXT PRIMARY KEY,\n" +
 		"  display_name TEXT NOT NULL DEFAULT '',\n" +
-		"  first_contact DATETIME NOT NULL\n" +
+		"  first_contact TIMESTAMP NOT NULL\n" +
 		");\n" +
 		"CREATE TABLE IF NOT EXISTS subscriptions (\n" +
 		"  user_id TEXT NOT NULL,\n" +
@@ -249,6 +249,7 @@ var tsLayouts = []string{
 	time.RFC3339Nano,
 	time.RFC3339,
 	"2006-01-02 15:04:05.999999999Z07:00",
+	"2006-01-02 15:04:05.999999999",
 	"2006-01-02 15:04:05",
 }
 
