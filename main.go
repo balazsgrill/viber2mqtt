@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -156,12 +157,23 @@ func (a *app) publish(topic, payload string) error {
 // ---------- webhook ----------
 
 func (a *app) handler(w http.ResponseWriter, r *http.Request) {
-	var ev event
-	if err := decodeJSON(r, &ev); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+	// Viber treats any non-200 as "webhook unavailable", and its availability
+	// probe may not be a JSON POST — so always answer 200 and process only
+	// well-formed callback bodies.
+	body, _ := io.ReadAll(r.Body)
+	log.Printf("viber: %s %s from %s (%d bytes)", r.Method, r.URL.Path, r.RemoteAddr, len(body))
+	if len(body) > 0 {
+		var ev event
+		if err := json.Unmarshal(body, &ev); err != nil {
+			log.Printf("viber: ignoring undecodable callback body: %v", err)
+		} else {
+			a.dispatch(ev)
+		}
 	}
-	log.Printf("viber: callback %q from %s (path %s)", ev.Event, r.RemoteAddr, r.URL.Path)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (a *app) dispatch(ev event) {
 	switch ev.Event {
 	case "webhook":
 		// set_webhook verification callback: nothing to do, just 200.
@@ -192,7 +204,6 @@ func (a *app) handler(w http.ResponseWriter, r *http.Request) {
 	default:
 		// delivered/seen/failed and anything else: acknowledge.
 	}
-	w.WriteHeader(http.StatusOK)
 }
 
 // registerUser adds the user to the registry if new and broadcasts.
@@ -200,14 +211,6 @@ func (a *app) registerUser(userID, displayName string) {
 	if isNew, err := a.store.UserFirstSeen(userID, displayName); err == nil && isNew {
 		a.broadcastNewUser(userID, displayName)
 	}
-}
-
-// decodeJSON wraps r.Body decoder to return a 400-friendly error.
-func decodeJSON(r *http.Request, v any) error {
-	if r.Body == nil {
-		return fmt.Errorf("no body")
-	}
-	return json.NewDecoder(r.Body).Decode(v)
 }
 
 // broadcastNewUser announces a newly-registered user to all other known users.
