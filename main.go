@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -69,6 +70,14 @@ func (a *app) connectMQTT() error {
 			a.lastErr = nil
 			a.mu.Unlock()
 			log.Printf("mqtt: connected to %s", addr)
+			// (re)subscribe on every connect so a clean-session reconnect
+			// restores the notification subscriptions.
+			for _, n := range a.cfg.Notifications {
+				if t := c.Subscribe(n.Topic, 1, a.onMessage(n.ID)); !t.WaitTimeout(10*time.Second) || t.Error() != nil {
+					log.Printf("mqtt: WARN subscribe %s: %v", n.Topic, t.Error())
+				}
+			}
+			log.Printf("mqtt: subscribed to %d notification topics", len(a.cfg.Notifications))
 		}).
 		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
 			a.mu.Lock()
@@ -83,18 +92,24 @@ func (a *app) connectMQTT() error {
 	client := mqtt.NewClient(opts)
 	tok := client.Connect()
 	if !tok.WaitTimeout(15 * time.Second) {
-		return fmt.Errorf("mqtt: connect timeout to %s", addr)
+		a.mu.Lock()
+		a.lastErr = fmt.Errorf("connect timeout to %s", addr)
+		a.mu.Unlock()
+		log.Printf("mqtt: connect timeout to %s; will keep retrying in background", addr)
+		a.mqtt = client
+		return nil
 	}
-	if tok.Error() != nil {
-		return fmt.Errorf("mqtt: connect to %s: %w", addr, tok.Error())
+	if err := tok.Error(); err != nil {
+		a.mu.Lock()
+		a.lastErr = err
+		a.mu.Unlock()
+		// Broker unavailable at startup is not fatal: the Viber bot must keep
+		// responding (spec 8). AutoReconnect keeps trying in the background.
+		log.Printf("mqtt: connect to %s failed: %v; will keep retrying in background", addr, err)
+		a.mqtt = client
+		return nil
 	}
 	a.mqtt = client
-	for _, n := range a.cfg.Notifications {
-		if t := client.Subscribe(n.Topic, 1, a.onMessage(n.ID)); !t.WaitTimeout(10*time.Second) || t.Error() != nil {
-			log.Printf("mqtt: WARN subscribe %s: %v", n.Topic, t.Error())
-		}
-	}
-	log.Printf("mqtt: subscribed to %d notification topics", len(a.cfg.Notifications))
 	return nil
 }
 
@@ -383,28 +398,39 @@ func run(ctx context.Context, cfg *Config) error {
 	defer store.Close()
 
 	viber := newViberClient(cfg.Viber.AuthToken, cfg.Viber.BotName)
-	if err := viber.RegisterWebhook(cfg.Viber.Webhook); err != nil {
-		return fmt.Errorf("viber webhook registration: %w", err)
-	}
-
 	a := newApp(cfg, store, viber)
-	if err := a.connectMQTT(); err != nil {
-		return err
-	}
-	defer a.mqtt.Disconnect(250)
 
-	// serve webhook on cfg.Server.Port
+	// Start the webhook server before registering the webhook with Viber:
+	// Viber immediately fires a verification callback to the URL, so the
+	// listener must be up (or Viber rejects the registration).
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler:      &webhookServer{app: a},
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
+	ln, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		return fmt.Errorf("webhook: %w", err)
+	}
 	errCh := make(chan error, 1)
 	go func() {
 		log.Printf("viber2mqtt: webhook listening on %s", srv.Addr)
-		errCh <- srv.ListenAndServe()
+		errCh <- srv.Serve(ln)
 	}()
+
+	if err := viber.RegisterWebhook(cfg.Viber.Webhook); err != nil {
+		ln.Close()
+		return fmt.Errorf("viber webhook registration: %w", err)
+	}
+
+	if err := a.connectMQTT(); err != nil {
+		ln.Close()
+		return err
+	}
+	defer a.mqtt.Disconnect(250)
+
+	// Block until the process is stopped or the server fails.
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
