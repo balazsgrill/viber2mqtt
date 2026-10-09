@@ -334,7 +334,7 @@ func TestWebhookFlow(t *testing.T) {
 	}
 	msg := func(uid, name, body string) {
 		t.Helper()
-		ev := `{"type":"message","contact_id":"` + uid + `","event":{"type":"message","contact_name":"` + name + `","message":"` + body + `"}}`
+		ev := `{"event":"message","sender":{"id":"` + uid + `","name":"` + name + `"},"message":{"type":"text","text":"` + body + `"}}`
 		postEvent(t, a, ev)
 	}
 	last := func(uid string) string {

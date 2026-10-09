@@ -146,33 +146,44 @@ func (a *app) handler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	// Viber's "subscribed"/"conversation_started" events carry the user contact in
-	// ContactID (a viber user id), not a registration id.
-	userID := ev.ContactID
-	displayName := ""
-	if ev.Event != nil {
-		displayName = ev.Event.ContactName
+	switch ev.Event {
+	case "webhook":
+		// set_webhook verification callback: nothing to do, just 200.
+	case "subscribed", "conversation_started":
+		u := ev.User
+		if u != nil && u.ID != "" {
+			a.registerUser(u.ID, u.Name)
+		}
+	case "unsubscribed":
+		if ev.UserID != "" {
+			_ = ev.UserID // user left; subscriptions stay, just no active conversation
+		}
+	case "message":
+		if ev.Message != nil && ev.Message.Type == "text" {
+			u := ev.Sender
+			if u != nil && u.ID != "" {
+				a.registerUser(u.ID, u.Name)
+				text := strings.TrimSpace(ev.Message.Text)
+				if strings.HasPrefix(text, "/") {
+					a.handleCommand(u.ID, text)
+				} else if act, ok := a.triggerToAction[strings.ToLower(text)]; ok {
+					a.handleAction(u.ID, act)
+				} else {
+					_ = a.send(u.ID, "Unrecognized message. Send /help for a list of commands.")
+				}
+			}
+		}
+	default:
+		// delivered/seen/failed and anything else: acknowledge.
 	}
-	if userID == "" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	// Register the user (first-seen check) and broadcast if new.
+	w.WriteHeader(http.StatusOK)
+}
+
+// registerUser adds the user to the registry if new and broadcasts.
+func (a *app) registerUser(userID, displayName string) {
 	if isNew, err := a.store.UserFirstSeen(userID, displayName); err == nil && isNew {
 		a.broadcastNewUser(userID, displayName)
 	}
-	// Inbound message handling.
-	if ev.Event != nil && ev.Event.Type == "message" {
-		text := strings.TrimSpace(ev.Event.Message)
-		if strings.HasPrefix(text, "/") {
-			a.handleCommand(userID, text)
-		} else if act, ok := a.triggerToAction[strings.ToLower(text)]; ok {
-			a.handleAction(userID, act)
-		} else {
-			_ = a.send(userID, "Unrecognized message. Send /help for a list of commands.")
-		}
-	}
-	w.WriteHeader(http.StatusOK)
 }
 
 // decodeJSON wraps r.Body decoder to return a 400-friendly error.
