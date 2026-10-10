@@ -12,7 +12,7 @@ import (
 
 const (
 	viberAPI       = "https://chatapi.viber.com/pa/send_message"
-	viberUserAgent = "ViberBot-Python/1.0.12"
+	viberUserAgent = "ViberBot-Go/1.0.0"
 )
 
 // ---------- callback payloads ----------
