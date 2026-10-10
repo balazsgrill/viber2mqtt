@@ -37,8 +37,9 @@ type event struct {
 
 // apiResponse is the structured response of the Viber REST API.
 type apiResponse struct {
-	Status        int    `json:"status"`
-	StatusMessage string `json:"status_message"`
+	Status        int      `json:"status"`
+	StatusMessage string   `json:"status_message"`
+	EventTypes    []string `json:"event_types"`
 }
 
 func (r apiResponse) errHint(op string) error {
@@ -71,12 +72,14 @@ func (c *viberClient) RegisterWebhook(webhookURL string) error {
 	body, _ := json.Marshal(map[string]string{
 		"url": webhookURL,
 	})
+	log.Printf("viber: set_webhook: registering url=%q request_body=%s", webhookURL, body)
 	res, err := c.post("https://chatapi.viber.com/pa/set_webhook", body)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
 	data, _ := io.ReadAll(res.Body)
+	log.Printf("viber: set_webhook: response HTTP %d, headers=%v, body=%s", res.StatusCode, res.Header, data)
 	var out apiResponse
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("viber: set_webhook: HTTP %d: %s", res.StatusCode, data)
@@ -84,7 +87,7 @@ func (c *viberClient) RegisterWebhook(webhookURL string) error {
 	if err := json.Unmarshal(data, &out); err == nil && out.Status != 0 {
 		return out.errHint("set_webhook")
 	}
-	log.Printf("viber: webhook registered at %s", webhookURL)
+	log.Printf("viber: webhook registered at %s (event_types=%v)", webhookURL, out.EventTypes)
 	return nil
 }
 
