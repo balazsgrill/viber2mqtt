@@ -70,9 +70,10 @@ func newViberClient(token, botName string) *viberClient {
 // RegisterWebhook registers (or re-registers) the webhook with Viber.
 func (c *viberClient) RegisterWebhook(webhookURL string) error {
 	body, _ := json.Marshal(map[string]string{
-		"url": webhookURL,
+		"auth_token": c.token,
+		"url":        webhookURL,
 	})
-	log.Printf("viber: set_webhook: registering url=%q request_body=%s", webhookURL, body)
+	log.Printf("viber: set_webhook: registering url=%q", webhookURL)
 	res, err := c.post("https://chatapi.viber.com/pa/set_webhook", body)
 	if err != nil {
 		return err
@@ -94,10 +95,11 @@ func (c *viberClient) RegisterWebhook(webhookURL string) error {
 // SendMessage sends a plain text message to a single user.
 func (c *viberClient) SendMessage(userID, text string) error {
 	body, _ := json.Marshal(map[string]any{
-		"receiver": userID,
-		"type":     "text",
-		"text":     text,
-		"sender":   map[string]string{"name": c.botName},
+		"auth_token": c.token,
+		"receiver":   userID,
+		"type":       "text",
+		"text":       text,
+		"sender":     map[string]string{"name": c.botName},
 	})
 	res, err := c.post(viberAPI, body)
 	if err != nil {
