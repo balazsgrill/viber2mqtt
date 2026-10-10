@@ -10,7 +10,10 @@ import (
 	"time"
 )
 
-const viberAPI = "https://chatapi.viber.com/pa/send_message"
+const (
+	viberAPI       = "https://chatapi.viber.com/pa/send_message"
+	viberUserAgent = "ViberBot-Python/1.0.12"
+)
 
 // ---------- callback payloads ----------
 
@@ -125,5 +128,6 @@ func (c *viberClient) post(url string, body []byte) (*http.Response, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Viber-Auth-Token", c.token)
+	req.Header.Set("User-Agent", viberUserAgent)
 	return c.http.Do(req)
 }
